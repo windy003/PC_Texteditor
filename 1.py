@@ -128,6 +128,12 @@ class TextEditor(QMainWindow):
         newAction.triggered.connect(self.newFile)
         fileMenu.addAction(newAction)
         
+        # 添加新建标签的快捷键动作
+        newTabAction = QAction('新建标签(&T)', self)
+        newTabAction.setShortcut('Ctrl+T')
+        newTabAction.triggered.connect(self.newFile)  # 复用 newFile 方法
+        fileMenu.addAction(newTabAction)
+        
         openAction = QAction('打开(&O)', self)
         openAction.setShortcut('Ctrl+O')
         openAction.triggered.connect(self.openFile)
