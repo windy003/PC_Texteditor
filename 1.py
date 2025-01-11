@@ -3,9 +3,11 @@ import os
 from PyQt5.QtWidgets import (QMainWindow, QApplication, QTextEdit, 
                            QAction, QFileDialog, QMessageBox,
                            QTabWidget)
-from PyQt5.QtGui import QIcon, QTextOption, QFont
+from PyQt5.QtGui import QIcon, QTextOption, QFont, QColor
 from PyQt5.QtCore import Qt
-from PyQt5.Qsci import QsciScintilla
+from PyQt5.Qsci import (QsciScintilla, QsciLexerPython, QsciLexerCPP, 
+                       QsciLexerHTML, QsciLexerJavaScript, QsciLexerCSS,
+                       QsciLexerXML, QsciLexerSQL)
 
 def resource_path(relative_path):
     """获取资源的绝对路径"""
@@ -24,6 +26,7 @@ class Editor(QsciScintilla):
         super().__init__(parent)
         self.setup_editor()
         self.modified = False  # 添加修改状态标志
+        self.filepath = None
         
     def setup_editor(self):
         # 设置行号显示
@@ -35,10 +38,21 @@ class Editor(QsciScintilla):
         self.font = QFont('Consolas', 12)
         self.setFont(self.font)
         
-        # 连接文本变化信号
-        self.textChanged.connect(self.updateLineNumberWidth)
+        # 设置自动缩进
+        self.setAutoIndent(True)
+        self.setIndentationGuides(True)
+        self.setIndentationsUseTabs(False)
+        self.setTabWidth(4)
         
-        # 连接修改信号
+        # 设置括号匹配
+        self.setBraceMatching(QsciScintilla.SloppyBraceMatch)
+        
+        # 设置当前行高亮
+        self.setCaretLineVisible(True)
+        self.setCaretLineBackgroundColor(QColor("#e8e8e8"))
+        
+        # 连接信号
+        self.textChanged.connect(self.updateLineNumberWidth)
         self.modificationChanged.connect(self.handleModificationChanged)
         
     def updateLineNumberWidth(self):
@@ -58,6 +72,34 @@ class Editor(QsciScintilla):
             if parent:
                 index = parent.tabs.indexOf(self)
                 parent.updateTabTitle(index)
+    
+    def set_lexer_by_filename(self, filename):
+        """根据文件名设置对应的语法高亮"""
+        if not filename:
+            return
+            
+        ext = os.path.splitext(filename)[1].lower()
+        lexer = None
+        
+        if ext in ['.py', '.pyw']:
+            lexer = QsciLexerPython(self)
+        elif ext in ['.c', '.cpp', '.h', '.hpp']:
+            lexer = QsciLexerCPP(self)
+        elif ext in ['.html', '.htm']:
+            lexer = QsciLexerHTML(self)
+        elif ext == '.js':
+            lexer = QsciLexerJavaScript(self)
+        elif ext == '.css':
+            lexer = QsciLexerCSS(self)
+        elif ext == '.xml':
+            lexer = QsciLexerXML(self)
+        elif ext == '.sql':
+            lexer = QsciLexerSQL(self)
+            
+        if lexer:
+            # 设置lexer的字体
+            lexer.setFont(self.font)
+            self.setLexer(lexer)
 
 class TextEditor(QMainWindow):
     def __init__(self):
@@ -123,16 +165,16 @@ class TextEditor(QMainWindow):
     
     def openFile(self):
         fname, _ = QFileDialog.getOpenFileName(self, '打开文件', '',
-                                             '文本文件 (*.txt);;所有文件 (*)')
+            '所有文件 (*);;Python文件 (*.py);;C/C++文件 (*.c *.cpp *.h);;HTML文件 (*.html *.htm);;'
+            'JavaScript文件 (*.js);;CSS文件 (*.css);;XML文件 (*.xml);;SQL文件 (*.sql)')
         if fname:
-            # 创建新标签
             editor = Editor()
             with open(fname, 'r', encoding='utf-8') as f:
                 editor.setText(f.read())
-            # 使用文件名作为标签名
+            editor.filepath = fname
+            editor.set_lexer_by_filename(fname)  # 设置语法高亮
             self.tabs.addTab(editor, os.path.basename(fname))
             self.tabs.setCurrentWidget(editor)
-            editor.filepath = fname  # 保存文件路径
     
     def saveFile(self):
         editor = self.currentEditor()
@@ -181,23 +223,19 @@ class TextEditor(QMainWindow):
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
-    # 设置应用程序图标
     app.setWindowIcon(QIcon(resource_path("icon.ico")))
     editor = TextEditor()
     
-    # 处理命令行参数中的文件
     if len(sys.argv) > 1:
         filepath = sys.argv[1]
         if os.path.exists(filepath):
-            # 创建新标签
             new_editor = Editor()
             with open(filepath, 'r', encoding='utf-8') as f:
                 new_editor.setText(f.read())
-            # 使用文件名作为标签名
+            new_editor.filepath = filepath
+            new_editor.set_lexer_by_filename(filepath)  # 设置语法高亮
             editor.tabs.addTab(new_editor, os.path.basename(filepath))
             editor.tabs.setCurrentWidget(new_editor)
-            new_editor.filepath = filepath
-            # 关闭默认创建的空白标签
             editor.tabs.removeTab(0)
     
     sys.exit(app.exec_())
