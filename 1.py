@@ -2,7 +2,7 @@ import sys
 import os
 from PyQt5.QtWidgets import (QMainWindow, QApplication, QTextEdit, 
                            QAction, QFileDialog, QMessageBox,
-                           QTabWidget)
+                           QTabWidget, QLabel)
 from PyQt5.QtGui import QIcon, QTextOption, QFont, QColor
 from PyQt5.QtCore import Qt
 from PyQt5.Qsci import (QsciScintilla, QsciLexerPython, QsciLexerCPP, 
@@ -27,6 +27,8 @@ class Editor(QsciScintilla):
         self.setup_editor()
         self.modified = False  # 添加修改状态标志
         self.filepath = None
+        self.encoding = 'UTF-8'  # 默认编码
+        self.line_ending = 'Windows (CRLF)'  # 默认换行符
         
     def setup_editor(self):
         # 设置行号显示
@@ -100,6 +102,29 @@ class Editor(QsciScintilla):
             # 设置lexer的字体
             lexer.setFont(self.font)
             self.setLexer(lexer)
+    
+    def detect_line_ending(self, text):
+        """检测文本的换行符类型"""
+        if '\r\n' in text:
+            self.line_ending = 'Windows (CRLF)'
+        elif '\n' in text:
+            self.line_ending = 'Unix (LF)'
+        elif '\r' in text:
+            self.line_ending = 'Mac (CR)'
+        else:
+            self.line_ending = 'Windows (CRLF)'  # 默认值
+            
+    def setText(self, text):
+        """重写 setText 方法以检测换行符"""
+        self.detect_line_ending(text)
+        super().setText(text)
+        # 通知父窗口更新状态栏
+        if hasattr(self, 'parent'):
+            parent = self.parent()
+            while parent and not isinstance(parent, TextEditor):
+                parent = parent.parent()
+            if parent:
+                parent.updateStatusBar()
 
 class TextEditor(QMainWindow):
     def __init__(self):
@@ -178,6 +203,13 @@ class TextEditor(QMainWindow):
         self.setGeometry(300, 300, 800, 600)
         self.setWindowTitle('文本编辑器')
         self.showMaximized()
+        
+        # 添加状态栏
+        self.statusBar = self.statusBar()
+        self.encodingLabel = QLabel('UTF-8')
+        self.lineEndingLabel = QLabel('Windows (CRLF)')
+        self.statusBar.addPermanentWidget(self.encodingLabel)
+        self.statusBar.addPermanentWidget(self.lineEndingLabel)
     
     def currentEditor(self):
         """获取当前活动的编辑器"""
@@ -194,12 +226,27 @@ class TextEditor(QMainWindow):
             'JavaScript文件 (*.js);;CSS文件 (*.css);;XML文件 (*.xml);;SQL文件 (*.sql)')
         if fname:
             editor = Editor()
-            with open(fname, 'r', encoding='utf-8') as f:
-                editor.setText(f.read())
+            try:
+                # 尝试以UTF-8读取
+                with open(fname, 'r', encoding='utf-8') as f:
+                    text = f.read()
+                editor.encoding = 'UTF-8'
+            except UnicodeDecodeError:
+                try:
+                    # 如果UTF-8失败，尝试GBK
+                    with open(fname, 'r', encoding='gbk') as f:
+                        text = f.read()
+                    editor.encoding = 'GBK'
+                except:
+                    QMessageBox.warning(self, '错误', '无法识别文件编码')
+                    return
+                    
+            editor.setText(text)
             editor.filepath = fname
-            editor.set_lexer_by_filename(fname)  # 设置语法高亮
+            editor.set_lexer_by_filename(fname)
             self.tabs.addTab(editor, os.path.basename(fname))
             self.tabs.setCurrentWidget(editor)
+            self.updateStatusBar()
     
     def saveFile(self):
         editor = self.currentEditor()
@@ -267,6 +314,13 @@ class TextEditor(QMainWindow):
             self.tabs.setCurrentIndex(current - 1)
         else:
             self.tabs.setCurrentIndex(self.tabs.count() - 1)
+    
+    def updateStatusBar(self):
+        """更新状态栏信息"""
+        editor = self.currentEditor()
+        if editor:
+            self.encodingLabel.setText(editor.encoding)
+            self.lineEndingLabel.setText(editor.line_ending)
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
