@@ -23,6 +23,7 @@ class Editor(QsciScintilla):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setup_editor()
+        self.modified = False  # 添加修改状态标志
         
     def setup_editor(self):
         # 设置行号显示
@@ -37,10 +38,26 @@ class Editor(QsciScintilla):
         # 连接文本变化信号
         self.textChanged.connect(self.updateLineNumberWidth)
         
+        # 连接修改信号
+        self.modificationChanged.connect(self.handleModificationChanged)
+        
     def updateLineNumberWidth(self):
+        """更新行号栏的宽度"""
         lines = self.lines()
-        width = len(str(lines)) * self.fontMetrics().width('0')
-        self.setMarginWidth(0, width + 5)
+        width = max(len(str(lines)) * self.fontMetrics().width('9') + 10, 30)
+        self.setMarginWidth(0, f"_{str(lines)}")  # 使用实际行数设置宽度
+    
+    def handleModificationChanged(self, modified):
+        """处理文本修改状态改变"""
+        self.modified = modified
+        # 通知父窗口更新标签
+        if hasattr(self, 'parent'):
+            parent = self.parent()
+            while parent and not isinstance(parent, TextEditor):
+                parent = parent.parent()
+            if parent:
+                index = parent.tabs.indexOf(self)
+                parent.updateTabTitle(index)
 
 class TextEditor(QMainWindow):
     def __init__(self):
@@ -132,7 +149,8 @@ class TextEditor(QMainWindow):
             with open(fname, 'w', encoding='utf-8') as f:
                 f.write(editor.text())
             editor.filepath = fname
-            self.tabs.setTabText(self.tabs.currentIndex(), os.path.basename(fname))
+            editor.modified = False  # 重置修改状态
+            self.updateTabTitle(self.tabs.currentIndex())
     
     def closeTab(self, index):
         if self.tabs.count() > 1:  # 保持至少一个标签页
@@ -145,6 +163,21 @@ class TextEditor(QMainWindow):
     def zoomOut(self):
         if editor := self.currentEditor():
             editor.zoomOut()
+    
+    def updateTabTitle(self, index):
+        """更新标签标题，添加修改标记"""
+        editor = self.tabs.widget(index)
+        current_text = self.tabs.tabText(index)
+        
+        # 移除可能存在的修改标记
+        if current_text.endswith('*'):
+            current_text = current_text[:-1]
+            
+        # 如果有修改则添加星号
+        if editor.modified:
+            self.tabs.setTabText(index, current_text + '*')
+        else:
+            self.tabs.setTabText(index, current_text)
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
