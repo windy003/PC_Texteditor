@@ -110,7 +110,7 @@ class TextEditor(QMainWindow):
         
         self.setGeometry(300, 300, 800, 600)
         self.setWindowTitle('文本编辑器')
-        self.show()
+        self.showMaximized()
     
     def currentEditor(self):
         """获取当前活动的编辑器"""
