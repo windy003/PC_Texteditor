@@ -138,6 +138,12 @@ class TextEditor(QMainWindow):
         saveAction.triggered.connect(self.saveFile)
         fileMenu.addAction(saveAction)
         
+        # 添加关闭标签的动作
+        closeTabAction = QAction('关闭标签(&W)', self)
+        closeTabAction.setShortcut('Ctrl+W')
+        closeTabAction.triggered.connect(self.closeCurrentTab)
+        fileMenu.addAction(closeTabAction)
+        
         viewMenu = menubar.addMenu('视图(&V)')
         
         zoomInAction = QAction('放大(&I)', self)
@@ -220,6 +226,12 @@ class TextEditor(QMainWindow):
             self.tabs.setTabText(index, current_text + '*')
         else:
             self.tabs.setTabText(index, current_text)
+    
+    def closeCurrentTab(self):
+        """关闭当前标签页"""
+        current_index = self.tabs.currentIndex()
+        if self.tabs.count() > 1:  # 保持至少一个标签页
+            self.tabs.removeTab(current_index)
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
