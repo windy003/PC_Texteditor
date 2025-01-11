@@ -184,4 +184,20 @@ if __name__ == '__main__':
     # 设置应用程序图标
     app.setWindowIcon(QIcon(resource_path("icon.ico")))
     editor = TextEditor()
+    
+    # 处理命令行参数中的文件
+    if len(sys.argv) > 1:
+        filepath = sys.argv[1]
+        if os.path.exists(filepath):
+            # 创建新标签
+            new_editor = Editor()
+            with open(filepath, 'r', encoding='utf-8') as f:
+                new_editor.setText(f.read())
+            # 使用文件名作为标签名
+            editor.tabs.addTab(new_editor, os.path.basename(filepath))
+            editor.tabs.setCurrentWidget(new_editor)
+            new_editor.filepath = filepath
+            # 关闭默认创建的空白标签
+            editor.tabs.removeTab(0)
+    
     sys.exit(app.exec_())
