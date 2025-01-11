@@ -156,6 +156,19 @@ class TextEditor(QMainWindow):
         zoomOutAction.triggered.connect(self.zoomOut)
         viewMenu.addAction(zoomOutAction)
         
+        # 添加标签切换动作
+        nextTabAction = QAction('下一个标签页', self)
+        nextTabAction.setShortcut('Ctrl+PgDown')
+        nextTabAction.triggered.connect(self.nextTab)
+        
+        prevTabAction = QAction('上一个标签页', self)
+        prevTabAction.setShortcut('Ctrl+PgUp')
+        prevTabAction.triggered.connect(self.prevTab)
+        
+        # 将动作添加到窗口，但不显示在菜单中
+        self.addAction(nextTabAction)
+        self.addAction(prevTabAction)
+        
         self.setGeometry(300, 300, 800, 600)
         self.setWindowTitle('文本编辑器')
         self.showMaximized()
@@ -232,6 +245,22 @@ class TextEditor(QMainWindow):
         current_index = self.tabs.currentIndex()
         if self.tabs.count() > 1:  # 保持至少一个标签页
             self.tabs.removeTab(current_index)
+    
+    def nextTab(self):
+        """切换到下一个标签页"""
+        current = self.tabs.currentIndex()
+        if current < self.tabs.count() - 1:
+            self.tabs.setCurrentIndex(current + 1)
+        else:
+            self.tabs.setCurrentIndex(0)
+    
+    def prevTab(self):
+        """切换到上一个标签页"""
+        current = self.tabs.currentIndex()
+        if current > 0:
+            self.tabs.setCurrentIndex(current - 1)
+        else:
+            self.tabs.setCurrentIndex(self.tabs.count() - 1)
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
