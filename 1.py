@@ -61,7 +61,7 @@ class Editor(QsciScintilla):
         """更新行号栏的宽度"""
         lines = self.lines()
         width = max(len(str(lines)) * self.fontMetrics().width('9') + 10, 30)
-        self.setMarginWidth(0, f"_{str(lines)}")  # 使用实际行数设置宽度
+        self.setMarginWidth(0, width)  # 使用计算出的width值设置边距宽度
     
     def handleModificationChanged(self, modified):
         """处理文本修改状态改变"""
