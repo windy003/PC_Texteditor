@@ -277,16 +277,28 @@ class TextEditor(QMainWindow):
         if fname:
             editor = Editor()
             try:
-                # 尝试以UTF-8读取
-                with open(fname, 'r', encoding='utf-8') as f:
-                    text = f.read()
-                editor.encoding = 'UTF-8'
+                # 以二进制模式读取文件以检测换行符
+                with open(fname, 'rb') as f:
+                    content = f.read()
+                    
+                # 检测文件的换行符类型
+                if b'\r\n' in content:
+                    editor.line_ending = 'Windows (CRLF)'
+                    text = content.decode(editor.encoding).replace('\r\n', '\n')
+                elif b'\n' in content:
+                    editor.line_ending = 'Unix (LF)'
+                    text = content.decode(editor.encoding)
+                elif b'\r' in content:
+                    editor.line_ending = 'Mac (CR)'
+                    text = content.decode(editor.encoding).replace('\r', '\n')
+                else:
+                    editor.line_ending = 'Windows (CRLF)'  # 默认值
+                    text = content.decode(editor.encoding)
+                    
             except UnicodeDecodeError:
                 try:
-                    # 如果UTF-8失败，尝试GBK
-                    with open(fname, 'r', encoding='gbk') as f:
-                        text = f.read()
                     editor.encoding = 'GBK'
+                    text = content.decode(editor.encoding)
                 except:
                     QMessageBox.warning(self, '错误', '无法识别文件编码')
                     return
@@ -313,8 +325,18 @@ class TextEditor(QMainWindow):
             
         if fname:
             try:
-                with open(fname, 'w', encoding='utf-8') as f:
-                    f.write(editor.text())
+                # 获取文本并规范化换行符
+                text = editor.text()
+                # 根据当前设置的换行符类型进行转换
+                if editor.line_ending == 'Windows (CRLF)':
+                    text = text.replace('\n', '\r\n')
+                elif editor.line_ending == 'Unix (LF)':
+                    text = text.replace('\r\n', '\n')
+                elif editor.line_ending == 'Mac (CR)':
+                    text = text.replace('\n', '\r')
+                
+                with open(fname, 'w', encoding='utf-8', newline='') as f:
+                    f.write(text)
                 editor.filepath = fname
                 editor.modified = False  # 重置修改状态
                 self.updateTabTitle(self.tabs.currentIndex())
