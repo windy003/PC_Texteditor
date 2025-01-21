@@ -1,4 +1,4 @@
-('D:\\files\\projects\\PC_Texteditor\\build\\Texteditor\\PYZ-00.pyz',
+('D:\\files\\projects\\PC_Texteditor\\build\\textEditor\\PYZ-00.pyz',
  [('PyQt5',
    'C:\\Users\\windy\\.pyenv\\pyenv-win\\versions\\3.9.13\\lib\\site-packages\\PyQt5\\__init__.py',
    'PYMODULE'),

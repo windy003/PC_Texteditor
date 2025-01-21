@@ -9,6 +9,9 @@ from PyQt5.Qsci import (QsciScintilla, QsciLexerPython, QsciLexerCPP,
                        QsciLexerHTML, QsciLexerJavaScript, QsciLexerCSS,
                        QsciLexerXML, QsciLexerSQL)
 
+# 在文件开头添加版本号常量
+VERSION = "2025/1/21"
+
 def resource_path(relative_path):
     """获取资源的绝对路径"""
     try:
@@ -248,6 +251,12 @@ class TextEditor(QMainWindow):
         self.addAction(nextTabAction)
         self.addAction(prevTabAction)
         
+        # 添加帮助菜单
+        helpMenu = menubar.addMenu('帮助(&H)')
+        aboutAction = QAction('关于(&A)', self)
+        aboutAction.triggered.connect(self.showAbout)
+        helpMenu.addAction(aboutAction)
+        
         self.setGeometry(300, 300, 800, 600)
         self.setWindowTitle('文本编辑器')
         self.showMaximized()
@@ -403,6 +412,15 @@ class TextEditor(QMainWindow):
         if editor:
             self.encodingLabel.setText(editor.encoding)
             self.lineEndingLabel.setText(editor.line_ending)
+    
+    def showAbout(self):
+        """显示关于对话框"""
+        QMessageBox.about(self, 
+            '关于文本编辑器',
+            f'文本编辑器 v{VERSION}\n\n'
+            '一个简单而强大的文本编辑器\n'
+            '支持多种编程语言的语法高亮\n'
+            ' 2025 保留所有权利')
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
