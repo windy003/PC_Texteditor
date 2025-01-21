@@ -29,6 +29,8 @@ class Editor(QsciScintilla):
         self.filepath = None
         self.encoding = 'UTF-8'  # 默认编码
         self.line_ending = 'Windows (CRLF)'  # 默认换行符
+        # 连接文本修改信号
+        self.textChanged.connect(self.handleTextChanged)
         
     def setup_editor(self):
         # 设置行号显示
@@ -54,14 +56,17 @@ class Editor(QsciScintilla):
         self.setCaretLineBackgroundColor(QColor("#e8e8e8"))
         
         # 连接信号
-        self.textChanged.connect(self.updateLineNumberWidth)
         self.modificationChanged.connect(self.handleModificationChanged)
         
-    def updateLineNumberWidth(self):
-        """更新行号栏的宽度"""
-        lines = self.lines()
-        width = max(len(str(lines)) * self.fontMetrics().width('9') + 10, 30)
-        self.setMarginWidth(0, width)  # 使用计算出的width值设置边距宽度
+    def handleTextChanged(self):
+        """处理文本变化"""
+        self.modified = True
+        self.updateLineNumberWidth()
+        # 通知父窗口更新标签
+        main_window = self.get_main_window()
+        if main_window:
+            index = main_window.tabs.indexOf(self)
+            main_window.updateTabTitle(index)
     
     def handleModificationChanged(self, modified):
         """处理文本修改状态改变"""
@@ -126,6 +131,49 @@ class Editor(QsciScintilla):
             if parent:
                 parent.updateStatusBar()
 
+    def updateLineNumberWidth(self):
+        """更新行号栏的宽度"""
+        lines = self.lines()
+        width = max(len(str(lines)) * self.fontMetrics().width('9') + 10, 30)
+        self.setMarginWidth(0, width)  # 使用计算出的width值设置边距宽度
+    
+    def keyPressEvent(self, event):
+        """处理按键事件"""
+        # 检查是否按下了 Ctrl+X
+        if event.key() == Qt.Key_X and event.modifiers() == Qt.ControlModifier:
+            if not self.hasSelectedText():
+                # 如果没有选中文本，执行剪切整行
+                line, _ = self.getCursorPosition()
+                # 获取当前行的内容
+                text = self.text(line)
+                # 选中整行
+                line_length = len(text)
+                self.setSelection(line, 0, line, line_length)
+                # 剪切选中内容
+                super().keyPressEvent(event)
+            else:
+                # 如果有选中的文本，执行普通的剪切操作
+                super().keyPressEvent(event)
+        # 检查是否按下了 Ctrl+S
+        elif event.key() == Qt.Key_S and event.modifiers() == Qt.ControlModifier:
+            # 获取主窗口并调用保存方法
+            main_window = self.get_main_window()
+            if main_window:
+                main_window.saveFile()
+            event.accept()
+        else:
+            # 其他按键保持默认行为
+            super().keyPressEvent(event)
+            
+    def get_main_window(self):
+        """获取主窗口实例"""
+        parent = self.parent()
+        while parent:
+            if isinstance(parent, TextEditor):
+                return parent
+            parent = parent.parent()
+        return None
+        
 class TextEditor(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -219,6 +267,8 @@ class TextEditor(QMainWindow):
         editor = Editor()
         self.tabs.addTab(editor, "未命名")
         self.tabs.setCurrentWidget(editor)
+        # 设置焦点到编辑器
+        editor.setFocus()
     
     def openFile(self):
         fname, _ = QFileDialog.getOpenFileName(self, '打开文件', '',
@@ -247,24 +297,34 @@ class TextEditor(QMainWindow):
             self.tabs.addTab(editor, os.path.basename(fname))
             self.tabs.setCurrentWidget(editor)
             self.updateStatusBar()
+            # 设置焦点到编辑器
+            editor.setFocus()
     
     def saveFile(self):
         editor = self.currentEditor()
         if not editor:
             return
-        
-        if hasattr(editor, 'filepath'):
+            
+        if editor.filepath:
             fname = editor.filepath
         else:
             fname, _ = QFileDialog.getSaveFileName(self, '保存文件', '',
                                                  '文本文件 (*.txt);;所有文件 (*)')
-        
+            
         if fname:
-            with open(fname, 'w', encoding='utf-8') as f:
-                f.write(editor.text())
-            editor.filepath = fname
-            editor.modified = False  # 重置修改状态
-            self.updateTabTitle(self.tabs.currentIndex())
+            try:
+                with open(fname, 'w', encoding='utf-8') as f:
+                    f.write(editor.text())
+                editor.filepath = fname
+                editor.modified = False  # 重置修改状态
+                self.updateTabTitle(self.tabs.currentIndex())
+                # 显示保存成功消息
+                self.statusBar.showMessage('文件已保存', 2000)  # 显示2秒
+                return True
+            except Exception as e:
+                QMessageBox.warning(self, '保存失败', f'保存文件时发生错误：{str(e)}')
+                return False
+        return False
     
     def closeTab(self, index):
         if self.tabs.count() > 1:  # 保持至少一个标签页
