@@ -8,9 +8,11 @@ from PyQt5.QtCore import Qt
 from PyQt5.Qsci import (QsciScintilla, QsciLexerPython, QsciLexerCPP, 
                        QsciLexerHTML, QsciLexerJavaScript, QsciLexerCSS,
                        QsciLexerXML, QsciLexerSQL)
+import winreg
+import ctypes
 
 # 在文件开头添加版本号常量
-VERSION = "2025/1/21"
+VERSION = "2025/1/21-01"
 
 def resource_path(relative_path):
     """获取资源的绝对路径"""
@@ -22,6 +24,68 @@ def resource_path(relative_path):
         base_path = os.path.abspath(".")
     
     return os.path.join(base_path, relative_path)
+
+def is_admin():
+    """检查是否具有管理员权限"""
+    try:
+        return ctypes.windll.shell32.IsUserAnAdmin()
+    except:
+        return False
+
+def add_context_menu():
+    """添加右键菜单"""
+    try:
+        # 获取程序路径
+        exe_path = sys.executable if getattr(sys, 'frozen', False) else sys.argv[0]
+        exe_path = f'"{exe_path}"'  # 添加引号以处理路径中的空格
+        
+        # 为所有文件添加右键菜单
+        key_path = "*\\shell\\TextEditor"
+        key = winreg.CreateKey(winreg.HKEY_CLASSES_ROOT, key_path)
+        
+        # 设置默认值
+        winreg.SetValue(key, "", winreg.REG_SZ, "TextEditor Context menu")
+        
+        # 设置显示的文本
+        winreg.SetValueEx(key, "MUIVerb", 0, winreg.REG_SZ, "使用文本编辑器打开(&T)")
+        
+        # 设置图标
+        if getattr(sys, 'frozen', False):
+            # 如果是打包后的exe，使用exe本身作为图标源
+            exe_path = sys.executable
+            winreg.SetValueEx(key, "Icon", 0, winreg.REG_SZ, f'"{exe_path}",0')
+        else:
+            # 开发环境下使用icon.ico
+            icon_path = resource_path("icon.ico")
+            if os.path.exists(icon_path):
+                abs_icon_path = os.path.abspath(icon_path)
+                abs_icon_path = abs_icon_path.replace('/', '\\')
+                winreg.SetValueEx(key, "Icon", 0, winreg.REG_SZ, f'"{abs_icon_path}",0')
+        
+        # 创建command子键
+        key_command = winreg.CreateKey(key, "command")
+        winreg.SetValue(key_command, "", winreg.REG_SZ, f'{exe_path} "%1"')
+        
+        # 关闭键
+        winreg.CloseKey(key_command)
+        winreg.CloseKey(key)
+        return True
+    except Exception as e:
+        print(f"添加右键菜单失败: {str(e)}")
+        return False
+
+def remove_context_menu():
+    """移除右键菜单"""
+    try:
+        key_path = "*\\shell\\TextEditor"
+        # 删除command子键
+        winreg.DeleteKey(winreg.HKEY_CLASSES_ROOT, f"{key_path}\\command")
+        # 删除主键
+        winreg.DeleteKey(winreg.HKEY_CLASSES_ROOT, key_path)
+        return True
+    except Exception as e:
+        print(f"移除右键菜单失败: {str(e)}")
+        return False
 
 class Editor(QsciScintilla):
     """单个编辑器组件"""
@@ -251,6 +315,19 @@ class TextEditor(QMainWindow):
         self.addAction(nextTabAction)
         self.addAction(prevTabAction)
         
+        # 添加工具菜单
+        toolsMenu = menubar.addMenu('工具(&T)')
+        
+        # 添加右键菜单选项
+        addContextAction = QAction('添加右键菜单(&A)', self)
+        addContextAction.triggered.connect(self.addContextMenu)
+        toolsMenu.addAction(addContextAction)
+        
+        # 移除右键菜单选项
+        removeContextAction = QAction('移除右键菜单(&R)', self)
+        removeContextAction.triggered.connect(self.removeContextMenu)
+        toolsMenu.addAction(removeContextAction)
+        
         # 添加帮助菜单
         helpMenu = menubar.addMenu('帮助(&H)')
         aboutAction = QAction('关于(&A)', self)
@@ -279,10 +356,15 @@ class TextEditor(QMainWindow):
         # 设置焦点到编辑器
         editor.setFocus()
     
-    def openFile(self):
-        fname, _ = QFileDialog.getOpenFileName(self, '打开文件', '',
-            '所有文件 (*);;Python文件 (*.py);;C/C++文件 (*.c *.cpp *.h);;HTML文件 (*.html *.htm);;'
-            'JavaScript文件 (*.js);;CSS文件 (*.css);;XML文件 (*.xml);;SQL文件 (*.sql)')
+    def openFile(self, filepath=None):
+        """打开文件"""
+        if filepath is None:
+            fname, _ = QFileDialog.getOpenFileName(self, '打开文件', '',
+                '所有文件 (*);;Python文件 (*.py);;C/C++文件 (*.c *.cpp *.h);;HTML文件 (*.html *.htm);;'
+                'JavaScript文件 (*.js);;CSS文件 (*.css);;XML文件 (*.xml);;SQL文件 (*.sql)')
+        else:
+            fname = filepath
+            
         if fname:
             editor = Editor()
             try:
@@ -421,22 +503,45 @@ class TextEditor(QMainWindow):
             '一个简单而强大的文本编辑器\n'
             '支持多种编程语言的语法高亮\n'
             ' 2025 保留所有权利')
+    
+    def addContextMenu(self):
+        """添加右键菜单的处理函数"""
+        if not is_admin():
+            QMessageBox.warning(self, '权限不足', '添加右键菜单需要管理员权限。\n请以管理员身份运行程序。')
+            return
+        
+        if add_context_menu():
+            QMessageBox.information(self, '成功', '右键菜单添加成功！')
+        else:
+            QMessageBox.warning(self, '失败', '右键菜单添加失败！')
+    
+    def removeContextMenu(self):
+        """移除右键菜单的处理函数"""
+        if not is_admin():
+            QMessageBox.warning(self, '权限不足', '移除右键菜单需要管理员权限。\n请以管理员身份运行程序。')
+            return
+        
+        if remove_context_menu():
+            QMessageBox.information(self, '成功', '右键菜单移除成功！')
+        else:
+            QMessageBox.warning(self, '失败', '右键菜单移除失败！')
 
 if __name__ == '__main__':
+    # 如果没有管理员权限，请求管理员权限重新运行
+    if not is_admin():
+        ctypes.windll.shell32.ShellExecuteW(None, "runas", sys.executable, " ".join(sys.argv), None, 1)
+        sys.exit()
+
     app = QApplication(sys.argv)
     app.setWindowIcon(QIcon(resource_path("icon.ico")))
     editor = TextEditor()
     
+    # 如果是第一次运行，添加右键菜单
+    if len(sys.argv) == 1:  # 没有命令行参数时尝试添加右键菜单
+        add_context_menu()
+    
+    # 如果有文件路径参数，打开该文件
     if len(sys.argv) > 1:
-        filepath = sys.argv[1]
-        if os.path.exists(filepath):
-            new_editor = Editor()
-            with open(filepath, 'r', encoding='utf-8') as f:
-                new_editor.setText(f.read())
-            new_editor.filepath = filepath
-            new_editor.set_lexer_by_filename(filepath)  # 设置语法高亮
-            editor.tabs.addTab(new_editor, os.path.basename(filepath))
-            editor.tabs.setCurrentWidget(new_editor)
-            editor.tabs.removeTab(0)
+        editor.openFile(sys.argv[1])
     
     sys.exit(app.exec_())
