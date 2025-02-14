@@ -189,9 +189,6 @@ class Editor(QsciScintilla):
     def setText(self, text):
         """重写 setText 方法以检测换行符"""
         self.detect_line_ending(text)
-        # 先将所有换行符统一为\n
-        text = text.replace('\r\n', '\n')  # 将Windows换行符转换为\n
-        text = text.replace('\r', '\n')    # 将Mac换行符转换为\n
         super().setText(text)
         # 通知父窗口更新状态栏
         if hasattr(self, 'parent'):
@@ -425,13 +422,9 @@ class TextEditor(QMainWindow):
                 if editor.line_ending == 'Windows (CRLF)':
                     text = text.replace('\n', '\r\n')
                 elif editor.line_ending == 'Unix (LF)':
-                    pass  # 已经是Unix格式，无需转换
+                    text = text.replace('\r\n', '\n')
                 elif editor.line_ending == 'Mac (CR)':
-                    text = text.replace('\n', '\r')  # 转换为Mac格式
-                
-                # 先将所有换行符统一为\n
-                text = text.replace('\r\n', '\n')  # 将Windows换行符转换为\n
-                text = text.replace('\r', '\n')    # 将Mac换行符转换为\n
+                    text = text.replace('\n', '\r')
                 
                 with open(fname, 'w', encoding='utf-8', newline='') as f:
                     f.write(text)
@@ -509,7 +502,7 @@ class TextEditor(QMainWindow):
             f'文本编辑器 v{VERSION}\n\n'
             '一个简单而强大的文本编辑器\n'
             '支持多种编程语言的语法高亮\n'
-            ' 2025 保留所有权利')
+            ' 2025/2/14-01 保留所有权利')
     
     def addContextMenu(self):
         """添加右键菜单的处理函数"""
