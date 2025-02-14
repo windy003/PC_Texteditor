@@ -12,7 +12,7 @@ import winreg
 import ctypes
 
 # 在文件开头添加版本号常量
-VERSION = "2025/2/14-02"
+VERSION = "2025/2/14-03"
 
 def resource_path(relative_path):
     """获取资源的绝对路径"""
