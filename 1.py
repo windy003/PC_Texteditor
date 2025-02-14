@@ -12,7 +12,7 @@ import winreg
 import ctypes
 
 # 在文件开头添加版本号常量
-VERSION = "2025/1/21-2"
+VERSION = "2025/2/14-02"
 
 def resource_path(relative_path):
     """获取资源的绝对路径"""
@@ -506,7 +506,7 @@ class TextEditor(QMainWindow):
             f'文本编辑器 v{VERSION}\n\n'
             '一个简单而强大的文本编辑器\n'
             '支持多种编程语言的语法高亮\n'
-            ' 2025/2/14-01 保留所有权利')
+            )
     
     def addContextMenu(self):
         """添加右键菜单的处理函数"""
