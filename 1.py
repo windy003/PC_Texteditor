@@ -418,13 +418,17 @@ class TextEditor(QMainWindow):
             try:
                 # 获取文本并规范化换行符
                 text = editor.text()
+                # 先将所有换行符统一为\n
+                text = text.replace('\r\n', '\n')  # 将Windows换行符转换为\n
+                text = text.replace('\r', '\n')    # 将Mac换行符转换为\n
+
                 # 根据当前设置的换行符类型进行转换
                 if editor.line_ending == 'Windows (CRLF)':
-                    text = text.replace('\n', '\r\n')
+                    text = text.replace('\n', '\r\n')  # 转换为Windows格式
                 elif editor.line_ending == 'Unix (LF)':
-                    text = text.replace('\r\n', '\n')
+                    pass  # 已经是Unix格式，无需转换
                 elif editor.line_ending == 'Mac (CR)':
-                    text = text.replace('\n', '\r')
+                    text = text.replace('\n', '\r')  # 转换为Mac格式
                 
                 with open(fname, 'w', encoding='utf-8', newline='') as f:
                     f.write(text)
