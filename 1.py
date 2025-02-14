@@ -78,9 +78,7 @@ def remove_context_menu():
     """移除右键菜单"""
     try:
         key_path = "*\\shell\\TextEditor"
-        # 删除command子键
-        winreg.DeleteKey(winreg.HKEY_CLASSES_ROOT, f"{key_path}\\command")
-        # 删除主键
+        # 直接删除主键即可，子键会自动删除
         winreg.DeleteKey(winreg.HKEY_CLASSES_ROOT, key_path)
         return True
     except Exception as e:
