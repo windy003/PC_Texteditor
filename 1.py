@@ -4,7 +4,7 @@ from PyQt5.QtWidgets import (QMainWindow, QApplication, QTextEdit,
                            QAction, QFileDialog, QMessageBox,
                            QTabWidget, QLabel)
 from PyQt5.QtGui import QIcon, QTextOption, QFont, QColor
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, QSettings
 from PyQt5.Qsci import (QsciScintilla, QsciLexerPython, QsciLexerCPP, 
                        QsciLexerHTML, QsciLexerJavaScript, QsciLexerCSS,
                        QsciLexerXML, QsciLexerSQL)
@@ -89,6 +89,7 @@ class Editor(QsciScintilla):
     """单个编辑器组件"""
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.settings = QSettings('TextEditor', 'EditorSettings')
         self.setup_editor()
         self.modified = False  # 添加修改状态标志
         self.filepath = None
@@ -96,30 +97,35 @@ class Editor(QsciScintilla):
         self.line_ending = 'Windows (CRLF)'  # 默认换行符
         # 连接文本修改信号
         self.textChanged.connect(self.handleTextChanged)
+        # 恢复缩放级别
+        self.restoreZoomLevel()
         
     def setup_editor(self):
         # 设置行号显示
         self.setMarginType(0, QsciScintilla.NumberMargin)
         self.setMarginWidth(0, "0000")
         self.setMarginLineNumbers(0, True)
-        
+
         # 设置字体
         self.font = QFont('Consolas', 12)
         self.setFont(self.font)
-        
+
+        # 设置缩放范围（-10到+20，默认是-10到+20，这里扩大到+40）
+        self.SendScintilla(QsciScintilla.SCI_SETZOOM, 0)  # 设置初始缩放为0
+
         # 设置自动缩进
         self.setAutoIndent(True)
         self.setIndentationGuides(True)
         self.setIndentationsUseTabs(False)
         self.setTabWidth(4)
-        
+
         # 设置括号匹配
         self.setBraceMatching(QsciScintilla.SloppyBraceMatch)
-        
+
         # 设置当前行高亮
         self.setCaretLineVisible(True)
         self.setCaretLineBackgroundColor(QColor("#e8e8e8"))
-        
+
         # 连接信号
         self.modificationChanged.connect(self.handleModificationChanged)
         
@@ -199,8 +205,11 @@ class Editor(QsciScintilla):
     def updateLineNumberWidth(self):
         """更新行号栏的宽度"""
         lines = self.lines()
-        width = max(len(str(lines)) * self.fontMetrics().width('9') + 10, 30)
-        self.setMarginWidth(0, width)  # 使用计算出的width值设置边距宽度
+        # 计算行号需要的位数，然后使用字符串设置宽度
+        # QsciScintilla 会根据字符串的长度和当前字体自动计算宽度
+        digits = len(str(lines))
+        # 使用 '9' 字符来设置宽度，加上一些额外空间
+        self.setMarginWidth(0, '9' * (digits + 2))
     
     def keyPressEvent(self, event):
         """处理按键事件"""
@@ -238,13 +247,27 @@ class Editor(QsciScintilla):
                 return parent
             parent = parent.parent()
         return None
+
+    def saveZoomLevel(self):
+        """保存缩放级别"""
+        current_zoom = self.SendScintilla(self.SCI_GETZOOM)
+        self.settings.setValue('zoomLevel', current_zoom)
+
+    def restoreZoomLevel(self):
+        """恢复缩放级别"""
+        zoom_level = self.settings.value('zoomLevel', 0, type=int)
+        self.SendScintilla(self.SCI_SETZOOM, zoom_level)
+        # 更新行号宽度以适应缩放
+        self.updateLineNumberWidth()
         
 class TextEditor(QMainWindow):
     def __init__(self):
         super().__init__()
         icon_path = resource_path("icon.ico")
         self.setWindowIcon(QIcon(icon_path))
+        self.settings = QSettings('TextEditor', 'WindowState')
         self.initUI()
+        self.restoreWindowState()
         
     def initUI(self):
         # 创建标签页组件
@@ -334,7 +357,6 @@ class TextEditor(QMainWindow):
         
         self.setGeometry(300, 300, 800, 600)
         self.setWindowTitle('文本编辑器')
-        self.showMaximized()
         
         # 添加状态栏
         self.statusBar = self.statusBar()
@@ -447,11 +469,27 @@ class TextEditor(QMainWindow):
         
     def zoomIn(self):
         if editor := self.currentEditor():
-            editor.zoomIn()
-    
+            # 获取当前缩放级别
+            current_zoom = editor.SendScintilla(editor.SCI_GETZOOM)
+            # 设置新的缩放级别，最大可到 100
+            new_zoom = min(current_zoom + 3, 100)
+            editor.SendScintilla(editor.SCI_SETZOOM, new_zoom)
+            # 更新行号宽度以适应缩放后的字体
+            editor.updateLineNumberWidth()
+            # 保存缩放级别
+            editor.saveZoomLevel()
+
     def zoomOut(self):
         if editor := self.currentEditor():
-            editor.zoomOut()
+            # 获取当前缩放级别
+            current_zoom = editor.SendScintilla(editor.SCI_GETZOOM)
+            # 设置新的缩放级别，最小可到 -10
+            new_zoom = max(current_zoom - 3, -10)
+            editor.SendScintilla(editor.SCI_SETZOOM, new_zoom)
+            # 更新行号宽度以适应缩放后的字体
+            editor.updateLineNumberWidth()
+            # 保存缩放级别
+            editor.saveZoomLevel()
     
     def updateTabTitle(self, index):
         """更新标签标题，添加修改标记"""
@@ -522,17 +560,63 @@ class TextEditor(QMainWindow):
         if not is_admin():
             QMessageBox.warning(self, '权限不足', '移除右键菜单需要管理员权限。\n请以管理员身份运行程序。')
             return
-        
+
         if remove_context_menu():
             QMessageBox.information(self, '成功', '右键菜单移除成功！')
         else:
             QMessageBox.warning(self, '失败', '右键菜单移除失败！')
 
+    def restoreWindowState(self):
+        """恢复窗口状态"""
+        # 恢复窗口几何信息（位置和大小）
+        geometry = self.settings.value('geometry')
+        if geometry:
+            self.restoreGeometry(geometry)
+
+        # 恢复窗口状态（最大化、最小化等）
+        window_state = self.settings.value('windowState')
+        if window_state:
+            self.restoreState(window_state)
+
+        # 恢复是否最大化
+        is_maximized = self.settings.value('isMaximized', True, type=bool)
+        if is_maximized:
+            self.showMaximized()
+        else:
+            self.show()
+
+    def saveWindowState(self):
+        """保存窗口状态"""
+        self.settings.setValue('geometry', self.saveGeometry())
+        self.settings.setValue('windowState', self.saveState())
+        self.settings.setValue('isMaximized', self.isMaximized())
+
+    def closeEvent(self, event):
+        """窗口关闭事件"""
+        self.saveWindowState()
+        event.accept()
+
+    def resizeEvent(self, event):
+        """窗口大小改变事件"""
+        super().resizeEvent(event)
+        self.saveWindowState()
+
+    def moveEvent(self, event):
+        """窗口移动事件"""
+        super().moveEvent(event)
+        self.saveWindowState()
+
+    def changeEvent(self, event):
+        """窗口状态改变事件（最大化、最小化等）"""
+        super().changeEvent(event)
+        if event.type() == event.WindowStateChange:
+            self.saveWindowState()
+
 if __name__ == '__main__':
     # 如果没有管理员权限，请求管理员权限重新运行
-    if not is_admin():
-        ctypes.windll.shell32.ShellExecuteW(None, "runas", sys.executable, " ".join(sys.argv), None, 1)
-        sys.exit()
+    # if not is_admin():
+    #     ctypes.windll.shell32.ShellExecuteW(None, "runas", sys.executable, " ".join(sys.argv), None, 1)
+    #     sys.exit()
 
     app = QApplication(sys.argv)
     app.setWindowIcon(QIcon(resource_path("icon.ico")))
