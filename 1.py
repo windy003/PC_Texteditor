@@ -287,11 +287,13 @@ class Editor(QsciScintilla):
 class TextEditor(QMainWindow):
     def __init__(self):
         super().__init__()
-        icon_path = resource_path("icon.ico")
+        # 使用 PNG 图标
+        icon_path = resource_path("2048x2048.png")
         self.setWindowIcon(QIcon(icon_path))
         self.settings = QSettings('TextEditor', 'WindowState')
         self.hotkey_id = 1  # 热键ID
         self.initUI()
+        # 托盘图标也使用相同的 PNG 图标
         self.createTrayIcon(icon_path)
         self.registerGlobalHotkey()
         self.restoreWindowState()
@@ -634,9 +636,6 @@ class TextEditor(QMainWindow):
 
     def registerGlobalHotkey(self):
         """注册全局热键"""
-        # 先注销之前的热键
-        self.unregisterGlobalHotkey()
-
         # 获取保存的热键设置，默认为 Ctrl+Alt+T
         hotkey_str = self.settings.value('globalHotkey', 'Ctrl+Alt+T')
 
@@ -646,17 +645,29 @@ class TextEditor(QMainWindow):
         if modifiers is not None and key is not None:
             # 注册热键
             hwnd = int(self.winId())
-            if ctypes.windll.user32.RegisterHotKey(hwnd, self.hotkey_id, modifiers, key):
+
+            # 先尝试注销可能存在的旧热键
+            ctypes.windll.user32.UnregisterHotKey(hwnd, self.hotkey_id)
+
+            # 注册新热键
+            result = ctypes.windll.user32.RegisterHotKey(hwnd, self.hotkey_id, modifiers, key)
+            if result:
                 # 安装事件过滤器
-                self.hotkey_filter = GlobalHotkeyFilter(self.onGlobalHotkey)
-                QApplication.instance().installNativeEventFilter(self.hotkey_filter)
+                if not hasattr(self, 'hotkey_filter'):
+                    self.hotkey_filter = GlobalHotkeyFilter(self.onGlobalHotkey)
+                    QApplication.instance().installNativeEventFilter(self.hotkey_filter)
             else:
-                QMessageBox.warning(self, '警告', f'无法注册全局热键 {hotkey_str}，可能已被其他程序占用。')
+                # 静默失败，不弹窗警告，只在日志中记录
+                print(f'无法注册全局热键 {hotkey_str}，可能已被其他程序占用。')
 
     def unregisterGlobalHotkey(self):
         """注销全局热键"""
-        hwnd = int(self.winId())
-        ctypes.windll.user32.UnregisterHotKey(hwnd, self.hotkey_id)
+        try:
+            hwnd = int(self.winId())
+            ctypes.windll.user32.UnregisterHotKey(hwnd, self.hotkey_id)
+        except:
+            # 忽略注销失败的错误
+            pass
 
     def parseHotkey(self, hotkey_str):
         """解析热键字符串，返回修饰符和按键码"""
@@ -824,13 +835,17 @@ class TextEditor(QMainWindow):
             self.saveWindowState()
 
 if __name__ == '__main__':
+    # 切换工作目录到脚本所在目录
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    os.chdir(script_dir)
+
     # 如果没有管理员权限，请求管理员权限重新运行
     # if not is_admin():
     #     ctypes.windll.shell32.ShellExecuteW(None, "runas", sys.executable, " ".join(sys.argv), None, 1)
     #     sys.exit()
 
     app = QApplication(sys.argv)
-    app.setWindowIcon(QIcon(resource_path("icon.ico")))
+    app.setWindowIcon(QIcon(resource_path("2048x2048.png")))
     editor = TextEditor()
     
     # 如果是第一次运行，添加右键菜单
