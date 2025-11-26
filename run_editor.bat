@@ -1,0 +1,1 @@
+start /b  pythonw  "D:\files\using\PC_Texteditor\1.py"

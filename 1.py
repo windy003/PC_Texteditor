@@ -1,18 +1,42 @@
 import sys
 import os
-from PyQt5.QtWidgets import (QMainWindow, QApplication, QTextEdit, 
+from PyQt5.QtWidgets import (QMainWindow, QApplication, QTextEdit,
                            QAction, QFileDialog, QMessageBox,
-                           QTabWidget, QLabel)
-from PyQt5.QtGui import QIcon, QTextOption, QFont, QColor
-from PyQt5.QtCore import Qt, QSettings
+                           QTabWidget, QLabel, QSystemTrayIcon, QMenu,
+                           QDialog, QVBoxLayout, QHBoxLayout, QPushButton,
+                           QKeySequenceEdit, QFormLayout)
+from PyQt5.QtGui import QIcon, QTextOption, QFont, QColor, QKeySequence
+from PyQt5.QtCore import Qt, QSettings, QAbstractNativeEventFilter
 from PyQt5.Qsci import (QsciScintilla, QsciLexerPython, QsciLexerCPP, 
                        QsciLexerHTML, QsciLexerJavaScript, QsciLexerCSS,
                        QsciLexerXML, QsciLexerSQL)
 import winreg
 import ctypes
+from ctypes import wintypes
 
 # 在文件开头添加版本号常量
 VERSION = "2025/2/14-03"
+
+# Windows 热键常量
+MOD_ALT = 0x0001
+MOD_CONTROL = 0x0002
+MOD_SHIFT = 0x0004
+MOD_WIN = 0x0008
+WM_HOTKEY = 0x0312
+
+class GlobalHotkeyFilter(QAbstractNativeEventFilter):
+    """全局热键事件过滤器"""
+    def __init__(self, callback):
+        super().__init__()
+        self.callback = callback
+
+    def nativeEventFilter(self, eventType, message):
+        if eventType == "windows_generic_MSG":
+            msg = wintypes.MSG.from_address(message.__int__())
+            if msg.message == WM_HOTKEY:
+                self.callback()
+                return True, 0
+        return False, 0
 
 def resource_path(relative_path):
     """获取资源的绝对路径"""
@@ -266,7 +290,10 @@ class TextEditor(QMainWindow):
         icon_path = resource_path("icon.ico")
         self.setWindowIcon(QIcon(icon_path))
         self.settings = QSettings('TextEditor', 'WindowState')
+        self.hotkey_id = 1  # 热键ID
         self.initUI()
+        self.createTrayIcon(icon_path)
+        self.registerGlobalHotkey()
         self.restoreWindowState()
         
     def initUI(self):
@@ -338,12 +365,12 @@ class TextEditor(QMainWindow):
         
         # 添加工具菜单
         toolsMenu = menubar.addMenu('工具(&T)')
-        
+
         # 添加右键菜单选项
         addContextAction = QAction('添加右键菜单(&A)', self)
         addContextAction.triggered.connect(self.addContextMenu)
         toolsMenu.addAction(addContextAction)
-        
+
         # 移除右键菜单选项
         removeContextAction = QAction('移除右键菜单(&R)', self)
         removeContextAction.triggered.connect(self.removeContextMenu)
@@ -364,7 +391,46 @@ class TextEditor(QMainWindow):
         self.lineEndingLabel = QLabel('Windows (CRLF)')
         self.statusBar.addPermanentWidget(self.encodingLabel)
         self.statusBar.addPermanentWidget(self.lineEndingLabel)
-    
+
+    def createTrayIcon(self, icon_path):
+        """创建系统托盘图标"""
+        self.tray_icon = QSystemTrayIcon(self)
+        self.tray_icon.setIcon(QIcon(icon_path))
+
+        # 创建托盘菜单
+        tray_menu = QMenu()
+
+        # 显示窗口动作
+        show_action = QAction('显示窗口', self)
+        show_action.triggered.connect(self.showMaximized)
+        tray_menu.addAction(show_action)
+
+        # 设置快捷键动作
+        hotkey_action = QAction('设置唤醒快捷键(&H)', self)
+        hotkey_action.triggered.connect(self.showHotkeyDialog)
+        tray_menu.addAction(hotkey_action)
+
+        tray_menu.addSeparator()
+
+        # 退出动作
+        quit_action = QAction('退出(&X)', self)
+        quit_action.triggered.connect(self.quitApplication)
+        tray_menu.addAction(quit_action)
+
+        self.tray_icon.setContextMenu(tray_menu)
+
+        # 双击托盘图标显示窗口
+        self.tray_icon.activated.connect(self.trayIconActivated)
+
+        # 显示托盘图标
+        self.tray_icon.show()
+
+    def trayIconActivated(self, reason):
+        """托盘图标激活事件"""
+        if reason == QSystemTrayIcon.DoubleClick:
+            self.showMaximized()
+            self.activateWindow()
+
     def currentEditor(self):
         """获取当前活动的编辑器"""
         return self.tabs.currentWidget()
@@ -566,6 +632,138 @@ class TextEditor(QMainWindow):
         else:
             QMessageBox.warning(self, '失败', '右键菜单移除失败！')
 
+    def registerGlobalHotkey(self):
+        """注册全局热键"""
+        # 先注销之前的热键
+        self.unregisterGlobalHotkey()
+
+        # 获取保存的热键设置，默认为 Ctrl+Alt+T
+        hotkey_str = self.settings.value('globalHotkey', 'Ctrl+Alt+T')
+
+        # 解析热键字符串
+        modifiers, key = self.parseHotkey(hotkey_str)
+
+        if modifiers is not None and key is not None:
+            # 注册热键
+            hwnd = int(self.winId())
+            if ctypes.windll.user32.RegisterHotKey(hwnd, self.hotkey_id, modifiers, key):
+                # 安装事件过滤器
+                self.hotkey_filter = GlobalHotkeyFilter(self.onGlobalHotkey)
+                QApplication.instance().installNativeEventFilter(self.hotkey_filter)
+            else:
+                QMessageBox.warning(self, '警告', f'无法注册全局热键 {hotkey_str}，可能已被其他程序占用。')
+
+    def unregisterGlobalHotkey(self):
+        """注销全局热键"""
+        hwnd = int(self.winId())
+        ctypes.windll.user32.UnregisterHotKey(hwnd, self.hotkey_id)
+
+    def parseHotkey(self, hotkey_str):
+        """解析热键字符串，返回修饰符和按键码"""
+        if not hotkey_str:
+            return None, None
+
+        key_sequence = QKeySequence(hotkey_str)
+        if key_sequence.isEmpty():
+            return None, None
+
+        # 获取第一个按键
+        key_code = key_sequence[0]
+
+        modifiers = 0
+        # 检查修饰符
+        if key_code & Qt.CTRL:
+            modifiers |= MOD_CONTROL
+        if key_code & Qt.ALT:
+            modifiers |= MOD_ALT
+        if key_code & Qt.SHIFT:
+            modifiers |= MOD_SHIFT
+        if key_code & Qt.META:
+            modifiers |= MOD_WIN
+
+        # 获取实际按键（去除修饰符）
+        key = key_code & ~(Qt.CTRL | Qt.ALT | Qt.SHIFT | Qt.META)
+
+        # 转换Qt按键码到Windows虚拟键码
+        vk_code = self.qtKeyToVK(key)
+
+        return modifiers, vk_code
+
+    def qtKeyToVK(self, qt_key):
+        """将Qt按键码转换为Windows虚拟键码"""
+        # 字母和数字键
+        if Qt.Key_A <= qt_key <= Qt.Key_Z:
+            return ord('A') + (qt_key - Qt.Key_A)
+        if Qt.Key_0 <= qt_key <= Qt.Key_9:
+            return ord('0') + (qt_key - Qt.Key_0)
+
+        # F功能键
+        if Qt.Key_F1 <= qt_key <= Qt.Key_F24:
+            return 0x70 + (qt_key - Qt.Key_F1)
+
+        # 其他常用键
+        key_map = {
+            Qt.Key_Space: 0x20,
+            Qt.Key_Return: 0x0D,
+            Qt.Key_Escape: 0x1B,
+            Qt.Key_Tab: 0x09,
+            Qt.Key_Backspace: 0x08,
+        }
+
+        return key_map.get(qt_key, qt_key & 0xFFFF)
+
+    def onGlobalHotkey(self):
+        """全局热键回调"""
+        if self.isVisible():
+            self.hide()
+        else:
+            self.showMaximized()
+            self.activateWindow()
+
+    def showHotkeyDialog(self):
+        """显示热键设置对话框"""
+        dialog = QDialog(self)
+        dialog.setWindowTitle('设置唤醒快捷键')
+        dialog.setModal(True)
+
+        layout = QVBoxLayout()
+
+        # 创建表单布局
+        form_layout = QFormLayout()
+
+        # 热键输入框
+        hotkey_edit = QKeySequenceEdit()
+        current_hotkey = self.settings.value('globalHotkey', 'Ctrl+Alt+T')
+        hotkey_edit.setKeySequence(QKeySequence(current_hotkey))
+
+        form_layout.addRow('快捷键:', hotkey_edit)
+        layout.addLayout(form_layout)
+
+        # 按钮
+        button_layout = QHBoxLayout()
+        ok_button = QPushButton('确定')
+        cancel_button = QPushButton('取消')
+
+        def on_ok():
+            new_hotkey = hotkey_edit.keySequence().toString()
+            if new_hotkey:
+                self.settings.setValue('globalHotkey', new_hotkey)
+                self.registerGlobalHotkey()
+                QMessageBox.information(self, '成功', f'全局热键已设置为: {new_hotkey}')
+                dialog.accept()
+            else:
+                QMessageBox.warning(self, '警告', '请输入有效的快捷键')
+
+        ok_button.clicked.connect(on_ok)
+        cancel_button.clicked.connect(dialog.reject)
+
+        button_layout.addWidget(ok_button)
+        button_layout.addWidget(cancel_button)
+
+        layout.addLayout(button_layout)
+        dialog.setLayout(layout)
+        dialog.exec_()
+
     def restoreWindowState(self):
         """恢复窗口状态"""
         # 恢复窗口几何信息（位置和大小）
@@ -592,9 +790,22 @@ class TextEditor(QMainWindow):
         self.settings.setValue('isMaximized', self.isMaximized())
 
     def closeEvent(self, event):
-        """窗口关闭事件"""
+        """窗口关闭事件 - 最小化到托盘"""
+        if self.tray_icon.isVisible():
+            # 隐藏窗口到托盘
+            self.hide()
+            self.saveWindowState()
+            event.ignore()  # 阻止窗口关闭
+        else:
+            self.saveWindowState()
+            event.accept()
+
+    def quitApplication(self):
+        """真正退出应用程序"""
         self.saveWindowState()
-        event.accept()
+        self.unregisterGlobalHotkey()  # 注销全局热键
+        self.tray_icon.hide()  # 隐藏托盘图标
+        QApplication.quit()  # 退出应用
 
     def resizeEvent(self, event):
         """窗口大小改变事件"""
