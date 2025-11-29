@@ -137,6 +137,9 @@ class Editor(QsciScintilla):
         # 设置缩放范围（-10到+20，默认是-10到+20，这里扩大到+40）
         self.SendScintilla(QsciScintilla.SCI_SETZOOM, 0)  # 设置初始缩放为0
 
+        # 设置自动换行
+        self.setWrapMode(QsciScintilla.WrapWord)  # 按单词边界换行
+
         # 设置自动缩进
         self.setAutoIndent(True)
         self.setIndentationGuides(True)
