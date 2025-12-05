@@ -407,7 +407,7 @@ class TextEditor(QMainWindow):
 
         # 显示窗口动作
         show_action = QAction('显示窗口', self)
-        show_action.triggered.connect(self.showMaximized)
+        show_action.triggered.connect(self.showWindow)
         tray_menu.addAction(show_action)
 
         # 设置快捷键动作
@@ -433,8 +433,16 @@ class TextEditor(QMainWindow):
     def trayIconActivated(self, reason):
         """托盘图标激活事件"""
         if reason == QSystemTrayIcon.DoubleClick:
+            self.showWindow()
+
+    def showWindow(self):
+        """显示窗口（根据保存的状态决定是否最大化）"""
+        is_maximized = self.settings.value('isMaximized', True, type=bool)
+        if is_maximized:
             self.showMaximized()
-            self.activateWindow()
+        else:
+            self.show()
+        self.activateWindow()
 
     def currentEditor(self):
         """获取当前活动的编辑器"""
@@ -731,8 +739,7 @@ class TextEditor(QMainWindow):
         if self.isVisible():
             self.hide()
         else:
-            self.showMaximized()
-            self.activateWindow()
+            self.showWindow()
 
     def showHotkeyDialog(self):
         """显示热键设置对话框"""
@@ -790,12 +797,8 @@ class TextEditor(QMainWindow):
         if window_state:
             self.restoreState(window_state)
 
-        # 恢复是否最大化
-        is_maximized = self.settings.value('isMaximized', True, type=bool)
-        if is_maximized:
-            self.showMaximized()
-        else:
-            self.show()
+        # 保存窗口最大化状态，但不显示窗口（默认在托盘启动）
+        self.settings.value('isMaximized', True, type=bool)
 
     def saveWindowState(self):
         """保存窗口状态"""
@@ -850,13 +853,14 @@ if __name__ == '__main__':
     app = QApplication(sys.argv)
     app.setWindowIcon(QIcon(resource_path("2048x2048.png")))
     editor = TextEditor()
-    
+
     # 如果是第一次运行，添加右键菜单
     if len(sys.argv) == 1:  # 没有命令行参数时尝试添加右键菜单
         add_context_menu()
-    
-    # 如果有文件路径参数，打开该文件
+
+    # 如果有文件路径参数，打开该文件并显示窗口
     if len(sys.argv) > 1:
         editor.openFile(sys.argv[1])
-    
+        editor.showWindow()  # 从右键菜单打开文件时显示窗口
+
     sys.exit(app.exec_())
