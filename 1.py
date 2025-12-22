@@ -452,6 +452,11 @@ class TextEditor(QMainWindow):
 
         self.activateWindow()
 
+        # 自动将焦点设置到当前编辑器
+        editor = self.currentEditor()
+        if editor:
+            editor.setFocus()
+
     def currentEditor(self):
         """获取当前活动的编辑器"""
         return self.tabs.currentWidget()
