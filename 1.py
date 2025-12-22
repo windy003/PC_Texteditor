@@ -436,12 +436,20 @@ class TextEditor(QMainWindow):
             self.showWindow()
 
     def showWindow(self):
-        """显示窗口（根据保存的状态决定是否最大化）"""
-        is_maximized = self.settings.value('isMaximized', True, type=bool)
+        """显示窗口并占据屏幕左半边"""
+        # 恢复最大化状态
+        is_maximized = self.settings.value('isMaximized', False, type=bool)
+
         if is_maximized:
             self.showMaximized()
         else:
-            self.show()
+            # 每次打开都占据屏幕左半部分
+            from PyQt5.QtWidgets import QDesktopWidget
+            screen = QDesktopWidget().screenGeometry()
+            # 设置窗口占据屏幕左半边（留一点任务栏空间）
+            self.setGeometry(0, 0, screen.width() // 2, screen.height() - 40)
+            self.showNormal()
+
         self.activateWindow()
 
     def currentEditor(self):
@@ -737,6 +745,8 @@ class TextEditor(QMainWindow):
     def onGlobalHotkey(self):
         """全局热键回调"""
         if self.isVisible():
+            # 隐藏窗口前先保存状态
+            self.saveWindowState()
             self.hide()
         else:
             self.showWindow()
@@ -786,22 +796,26 @@ class TextEditor(QMainWindow):
         dialog.exec_()
 
     def restoreWindowState(self):
-        """恢复窗口状态"""
+        """恢复窗口状态（在初始化时调用）"""
         # 恢复窗口几何信息（位置和大小）
         geometry = self.settings.value('geometry')
         if geometry:
             self.restoreGeometry(geometry)
 
-        # 恢复窗口状态（最大化、最小化等）
+        # 恢复窗口状态（工具栏、停靠窗口等）
         window_state = self.settings.value('windowState')
         if window_state:
             self.restoreState(window_state)
 
-        # 保存窗口最大化状态，但不显示窗口（默认在托盘启动）
-        self.settings.value('isMaximized', True, type=bool)
-
     def saveWindowState(self):
         """保存窗口状态"""
+        # 如果窗口是最大化的，不保存几何信息（会保存最大化前的位置）
+        if not self.isMaximized():
+            self.settings.setValue('windowX', self.x())
+            self.settings.setValue('windowY', self.y())
+            self.settings.setValue('windowWidth', self.width())
+            self.settings.setValue('windowHeight', self.height())
+
         self.settings.setValue('geometry', self.saveGeometry())
         self.settings.setValue('windowState', self.saveState())
         self.settings.setValue('isMaximized', self.isMaximized())
@@ -849,6 +863,14 @@ if __name__ == '__main__':
     # if not is_admin():
     #     ctypes.windll.shell32.ShellExecuteW(None, "runas", sys.executable, " ".join(sys.argv), None, 1)
     #     sys.exit()
+
+    # 设置Windows任务栏图标（Windows 7及以上）
+    try:
+        # 设置AppUserModelID以确保任务栏图标正确显示
+        myappid = 'mycompany.texteditor.1.0'
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
+    except:
+        pass
 
     app = QApplication(sys.argv)
     app.setWindowIcon(QIcon(resource_path("2048x2048.png")))
